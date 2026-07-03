@@ -19,7 +19,6 @@ from datetime import date, datetime, timedelta
 
 import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
 
 from jira_sync import (
     JiraClient,
@@ -684,89 +683,37 @@ def tab_brands(brand_sel: str, only_open: bool) -> None:
 
 
 # ----- One-time default-user onboarding --------------------------------------
-DU_KEY = "duDefaultUser"
+DU_PARAM = "du_user"
 
 
-def _js_safe(value: str) -> str:
-    """Sanitize a value for safe inlining inside a single-quoted JS string."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\n", "")
-        .replace("\r", "")
-        .replace("<", "")
-        .replace(">", "")
-    )
+def get_default_user_id() -> str | None:
+    """Resolve the current default user id from the URL (durable) or session."""
+    val = st.query_params.get(DU_PARAM)
+    if val:
+        return val
+    return st.session_state.get(DU_PARAM)
 
 
-def _restore_default_user_bridge() -> None:
-    """If this browser has a saved default user but the URL has no ?du_user,
-    add it and reload — so a returning visitor skips the onboarding gate."""
-    components.html(
-        f"""
-        <script>
-        (function() {{
-          try {{
-            var saved = window.localStorage.getItem('{DU_KEY}');
-            var url = new URL(window.parent.location.href);
-            if (saved && !url.searchParams.has('du_user')) {{
-              url.searchParams.set('du_user', saved);
-              window.parent.location.replace(url.toString());
-            }}
-          }} catch (e) {{}}
-        }})();
-        </script>
-        """,
-        height=0,
-    )
+def set_default_user(account_id: str, remember: bool) -> None:
+    """Record the chosen default user. `remember` writes it to the URL query
+    param (so it survives reloads and is shareable); otherwise it lives only for
+    this browser session. Works identically locally and on Streamlit Cloud."""
+    st.session_state[DU_PARAM] = account_id
+    if remember:
+        st.query_params[DU_PARAM] = account_id
+    st.rerun()
 
 
-def _commit_default_user(account_id: str, remember: bool) -> None:
-    """Persist the chosen default user (optionally to this browser) and reload
-    into the dashboard with ?du_user set."""
-    acc = _js_safe(account_id)
-    set_ls = f"window.localStorage.setItem('{DU_KEY}', '{acc}');" if remember else ""
-    components.html(
-        f"""
-        <script>
-        (function() {{
-          try {{
-            {set_ls}
-            var url = new URL(window.parent.location.href);
-            url.searchParams.set('du_user', '{acc}');
-            window.parent.location.replace(url.toString());
-          }} catch (e) {{}}
-        }})();
-        </script>
-        """,
-        height=0,
-    )
-
-
-def _reset_default_user() -> None:
-    """Forget this browser's default user and return to the onboarding gate."""
-    components.html(
-        f"""
-        <script>
-        (function() {{
-          try {{
-            window.localStorage.removeItem('{DU_KEY}');
-            var url = new URL(window.parent.location.href);
-            url.searchParams.delete('du_user');
-            window.parent.location.replace(url.toString());
-          }} catch (e) {{}}
-        }})();
-        </script>
-        """,
-        height=0,
-    )
+def reset_default_user() -> None:
+    """Forget the default user and return to the onboarding gate."""
+    st.session_state.pop(DU_PARAM, None)
+    if DU_PARAM in st.query_params:
+        del st.query_params[DU_PARAM]
+    st.rerun()
 
 
 def onboarding_gate(users: list[dict], me: dict) -> None:
     """First-run screen: pick your name, optionally remember it on this device."""
-    _restore_default_user_bridge()
-
     st.markdown(
         f"""
         <div style="max-width:640px;margin:6vh auto 18px;text-align:center;">
@@ -802,9 +749,7 @@ def onboarding_gate(users: list[dict], me: dict) -> None:
         )
         if st.button("Continue to dashboard  →", key="onb_go", use_container_width=True):
             acc = users[names.index(sel)]["account_id"]
-            _commit_default_user(acc, remember)
-            st.caption("Loading your dashboard…")
-            st.stop()
+            set_default_user(acc, remember)
     st.stop()
 
 
@@ -832,7 +777,7 @@ def main() -> None:
         users.insert(0, {"account_id": me["account_id"], "display_name": me["display_name"], "email": me["email"]})
 
     # ---------------- One-time default-user gate -----------------------------
-    du_user = st.query_params.get("du_user")
+    du_user = get_default_user_id()
     if not du_user or not any(u["account_id"] == du_user for u in users):
         onboarding_gate(users, me)  # renders the gate and stops the run
 
@@ -854,8 +799,7 @@ def main() -> None:
             + ("" if is_default else f" · viewing {chosen_name}")
         )
         if st.button("↺ Reset default user (this device)", key="reset_default"):
-            _reset_default_user()
-            st.stop()
+            reset_default_user()
 
         labels_map = {"7": "Last 7 days", "15": "Last 15 days", "30": "Last 30 days", "custom": "Custom"}
         preset = st.radio("Reporting period", list(labels_map.keys()), format_func=lambda k: labels_map[k], index=0)
