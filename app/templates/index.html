@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jira Work Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">JW</div>
+        <div>
+          <h1>Jira Work Dashboard</h1>
+          <p class="subtitle">Tickets &amp; daily logged hours · <a id="jira-link" href="{{ jira_base_url }}" target="_blank" rel="noopener">dataunveil.atlassian.net</a></p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill" id="connection-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting…</span>
+        </div>
+        <button type="button" class="btn btn-primary" id="refresh-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    {% if not credentials_configured %}
+    <section class="banner banner-warning">
+      <strong>Setup required:</strong> Copy <code>.env.example</code> to <code>.env</code>, add your Atlassian email and API token, then restart the server.
+    </section>
+    {% endif %}
+
+    <section class="controls">
+      <div class="preset-group" id="preset-group">
+        <button type="button" class="preset-btn active" data-preset="7">7 days</button>
+        <button type="button" class="preset-btn" data-preset="15">15 days</button>
+        <button type="button" class="preset-btn" data-preset="30">30 days</button>
+        <button type="button" class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+      <div class="custom-range hidden" id="custom-range">
+        <label>
+          From
+          <input type="date" id="custom-start" />
+        </label>
+        <label>
+          To
+          <input type="date" id="custom-end" />
+        </label>
+        <button type="button" class="btn btn-secondary" id="apply-custom">Apply</button>
+      </div>
+      <div class="meta-line">
+        <span id="last-updated">Last updated: —</span>
+        <span id="auto-refresh-label">Auto-refresh: {{ auto_refresh_seconds }}s</span>
+      </div>
+    </section>
+
+    <section class="stats-grid" id="stats-grid">
+      <article class="stat-card">
+        <span class="stat-label">Total hours</span>
+        <span class="stat-value" id="stat-total-hours">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Days with logs</span>
+        <span class="stat-value" id="stat-days-logged">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Active tickets</span>
+        <span class="stat-value" id="stat-active-tickets">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Tickets with logs</span>
+        <span class="stat-value" id="stat-tickets-logged">—</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Avg / logged day</span>
+        <span class="stat-value" id="stat-avg-hours">—</span>
+      </article>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="panel-header">
+        <h2>Daily logged hours</h2>
+        <p class="panel-sub">Hours you logged in Jira per calendar day</p>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="hours-chart"></canvas>
+      </div>
+    </section>
+
+    <div class="split-panels">
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Your tickets</h2>
+          <p class="panel-sub">Assigned open tickets + anything you logged time on</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Summary</th>
+                <th>Status</th>
+                <th>Hours (range)</th>
+              </tr>
+            </thead>
+            <tbody id="tickets-body">
+              <tr><td colspan="4" class="empty-row">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Worklog detail</h2>
+          <p class="panel-sub">Every log entry in the selected range</p>
+        </div>
+        <div class="table-wrap table-wrap-tall">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Ticket</th>
+                <th>Hours</th>
+                <th>Comment</th>
+              </tr>
+            </thead>
+            <tbody id="worklogs-body">
+              <tr><td colspan="4" class="empty-row">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script>
+    window.APP_CONFIG = {
+      autoRefreshSeconds: {{ auto_refresh_seconds }},
+      credentialsConfigured: {{ 'true' if credentials_configured else 'false' }}
+    };
+  </script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
