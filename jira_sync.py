@@ -27,12 +27,26 @@ class JiraError(Exception):
         self.status_code = status_code
 
 
+def _cfg(key: str, default: str = "") -> str:
+    """Read from env (.env / Cloud env vars), then Streamlit secrets."""
+    value = os.getenv(key, "").strip()
+    if value:
+        return value
+    try:
+        import streamlit as st
+
+        raw = st.secrets.get(key, default)  # type: ignore[attr-defined]
+        return str(raw or default).strip()
+    except Exception:
+        return default
+
+
 def get_config() -> dict[str, Any]:
     return {
-        "email": os.getenv("JIRA_EMAIL", "").strip(),
-        "token": os.getenv("JIRA_API_TOKEN", "").strip(),
-        "base_url": os.getenv("JIRA_BASE_URL", "https://dataunveil.atlassian.net").rstrip("/"),
-        "auto_refresh_seconds": int(os.getenv("AUTO_REFRESH_SECONDS", "30") or "30"),
+        "email": _cfg("JIRA_EMAIL"),
+        "token": _cfg("JIRA_API_TOKEN"),
+        "base_url": _cfg("JIRA_BASE_URL", "https://dataunveil.atlassian.net").rstrip("/"),
+        "auto_refresh_seconds": int(_cfg("AUTO_REFRESH_SECONDS", "30") or "30"),
     }
 
 

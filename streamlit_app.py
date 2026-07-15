@@ -766,7 +766,18 @@ def main() -> None:
     try:
         me = JiraClient(config).verify_connection()
     except JiraError as exc:
-        st.error(f"Connection failed: {exc}"); st.stop()
+        st.error(f"Connection failed: {exc}")
+        if getattr(exc, "status_code", None) == 401:
+            st.warning(
+                "**Jira rejected your API credentials (401).** "
+                "Your token is expired, revoked, or invalid.\n\n"
+                "1. Open [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)\n"
+                "2. Create an API token **without scopes** (classic)\n"
+                "3. **Local:** put it in `.env` as `JIRA_API_TOKEN=...` and restart\n"
+                "4. **Streamlit Cloud:** App settings → Secrets → paste the same keys "
+                "(`JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_BASE_URL`) and reboot the app"
+            )
+        st.stop()
 
     # ---------------- Team roster (needed for onboarding + sidebar) ----------
     try:
